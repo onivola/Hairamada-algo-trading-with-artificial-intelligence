@@ -1,0 +1,17 @@
+
+
+conda create -n drl python=3.7.13 tensorflow=1.14.0
+
+
+
+conda list -n drl
+
+conda activate drl
+
+
+current_step = 84
+nb_pos=55
+reward=3
+done = 1
+
+3090.77

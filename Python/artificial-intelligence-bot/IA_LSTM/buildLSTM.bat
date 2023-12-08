@@ -1,0 +1,3 @@
+
+python mainlstm.py
+pause

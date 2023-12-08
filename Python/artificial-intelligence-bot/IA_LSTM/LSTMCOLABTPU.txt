@@ -1,0 +1,125 @@
+
+import time
+import os
+from threading import Thread
+from time import sleep
+
+from tensorflow import keras 
+import tensorflow as tf
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+
+from sklearn.preprocessing import MinMaxScaler
+from datetime import datetime
+from tensorflow import keras 
+import tensorflow as tf
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+from sklearn.preprocessing import MinMaxScaler
+
+from datetime import datetime
+from tensorflow import keras 
+import tensorflow as tf
+
+
+import chardet
+def GetCSVData(file):
+  df= pd.read_csv(file,encoding=GetEncod(file))
+  #print(df)
+  return df
+
+
+def GetEncod(file):
+  with open(file, 'rb') as rawdata:
+    result = chardet.detect(rawdata.read(100000))
+    #print(result['encoding'])
+    return result['encoding']
+
+def Iloc_df(dataset_train):
+  training_set = dataset_train.iloc[:, 3:4].values #open values
+  #dataset_train.head()
+  return training_set
+def fitTransform(training_test):
+  sc = MinMaxScaler(feature_range = (0, 1))
+  training_set_scaled = sc.fit_transform(training_test) #training_set data
+  return training_set_scaled
+
+def Get_xtrain_ytrain(training_set_scaled): 
+  X_train = []
+  y_train = []
+  for i in range(60, len(training_set_scaled)-5): #0---10
+      # Creates the 60 timesteps of each value. E.g. row 1 = 0 -> 59, row 2 = 1 -> 60
+      X_train.append(training_set_scaled[i-60:i, 0])
+      #print("x")
+      #print(X_train)
+        # Contains the next value after the 60 timesteps. E.g. row 1 = last value of row 2, row 2 = last value of row 3
+      y_train.append(training_set_scaled[i,0])
+      #print("y")
+      #print(y_train)
+  # Convert to numpy array to be accepted in our RNN
+  X_train, y_train = np.array(X_train), np.array(y_train)
+
+  X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+
+  print(len(X_train))
+  print(len(y_train))
+  return [X_train,y_train]
+def make_model(X_train,y_train,epochs):
+  regressor = Sequential()
+
+  regressor.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], 1)))
+  regressor.add(Dropout(0.2))
+
+  regressor.add(LSTM(units = 50, return_sequences = True))
+  regressor.add(Dropout(0.2))
+
+  regressor.add(LSTM(units = 50, return_sequences = True))
+  regressor.add(Dropout(0.2))
+
+  regressor.add(LSTM(units = 50))
+  regressor.add(Dropout(0.2))
+
+  regressor.add(Dense(units = 1))
+  #opt = tf.train.AdamOptimizer(0.001)
+
+  #regressor.fit(X_train, y_train, epochs = epochs, batch_size = 32)
+  #regressor.save('LSTM5CHANDEL.model')
+  return regressor
+resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + os.environ['COLAB_TPU_ADDR'])
+tf.config.experimental_connect_to_host(resolver.master())
+tf.tpu.experimental.initialize_tpu_system(resolver)
+strategy = tf.distribute.experimental.TPUStrategy(resolver)
+
+with strategy.scope():
+    model = make_model(X_train,y_train,50)
+    model.compile(optimizer = 'adam', loss = 'mean_squared_error')
+	
+	
+	
+	
+	
+	
+	
+	
+file = "volatility75.csv"
+df = GetCSVData(file)
+training_set = Iloc_df(df)
+print(df)
+print(training_set)
+training_set_scaled =fitTransform(training_set)
+XY = Get_xtrain_ytrain(training_set_scaled)
+X_train = XY[0]
+y_train = XY[1]
+print(y_train)
+
+history = model.fit(X_train, y_train,
+                        epochs=200,
+                        batch_size=32*8)
+						
+						
+model.save('LSTM5200.h5')

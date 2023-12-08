@@ -1,0 +1,286 @@
+//+------------------------------------------------------------------+
+//|                                                          2ma.mq5 |
+//|                                  Copyright 2021, MetaQuotes Ltd. |
+//|                                             https://www.mql5.com |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2021, MetaQuotes Ltd."
+#property link      "https://www.mql5.com"
+#property version   "1.00"
+ENUM_TIMEFRAMES PERIOD = PERIOD_M1;
+#include <Hairabot\Utils.mq5>
+#include <Trade\Trade.mqh>
+input string             InpDirectoryName="Data"; // directory name
+input string             InpSymbolName="Volatility 75 Index";  
+input string             InpFileName="datasetLSTM.csv";
+input string             InpFileName2="datasetLSTM.txt";
+
+input string             InpFilePredict="predictLSTM.csv";
+double nb_pos = 0;
+double last_predict = -10;
+double predict = -10;
+bool pas = false;
+bool isbuy = false;
+bool ebuy = false;
+float iMA(int n,ENUM_TIMEFRAMES periode,int ma_period,ENUM_MA_METHOD ma_method) {
+   
+   int signal;
+   double myPriceArray[];
+   int iACDefinition = iMA(_Symbol,periode,ma_period,0,ma_method,PRICE_CLOSE);
+   ArraySetAsSeries(myPriceArray,true);
+   CopyBuffer(iACDefinition,0,0,50,myPriceArray); 
+    //Print(myPriceArray[2]);
+   float iACValue = myPriceArray[n];
+   return iACValue;
+}
+int CheckEMA(ENUM_TIMEFRAMES periode,double ema01,double ema02,double ema1,double ema2) {
+
+   if(ema01>ema02 && ema1<ema2) {
+      return 0;
+   } else if(ema01<ema02 && ema1>ema2) {
+      return 1;
+    }
+   return 2;
+}
+
+double Read_Predict()
+{
+   
+  //--- open the file
+   ResetLastError();
+   int file_handle=FileOpen(InpDirectoryName+"//"+InpFileName,FILE_READ|FILE_BIN|FILE_ANSI|FILE_COMMON);
+   if(file_handle!=INVALID_HANDLE)
+     {
+      PrintFormat("%s file is available for reading",InpFileName);
+      PrintFormat("File path: %s\\Files\\",TerminalInfoString(TERMINAL_DATA_PATH));
+      //--- additional variables
+      int    str_size;
+      string str;
+      //--- read data from the file
+      while(!FileIsEnding(file_handle))
+        {
+         //--- find out how many symbols are used for writing the time
+         str_size=FileReadInteger(file_handle,INT_VALUE);
+         //--- read the string
+         str=FileReadString(file_handle,str_size);
+         //--- print the string
+         PrintFormat(str);
+        }
+      //--- close the file
+      FileClose(file_handle);
+      PrintFormat("Data is read, %s file is closed",InpFileName);
+     }
+   else
+      PrintFormat("Failed to open %s file, Error code = %d",InpFileName,GetLastError());
+   return 1;
+}
+  int OnInit()
+  {
+//---
+    string res = Read_Predict();
+//---
+   return(INIT_SUCCEEDED);
+  }
+  
+bool BuildDataset(double len,double& result[],int get) {
+   ArrayResize(result, len);
+   for(int i=0;i<len-1;i++) {
+      result[i] = getChandelierbyIndiceLSTM(_Symbol, PERIOD_M1, 70,get,i);
+      Print(result[i]);
+   }
+   return true;
+   
+}
+void OnTick()
+  {
+      double second = Seconds(60);
+      int posTotal = getSymbolPositionTotal(_Symbol);
+       
+      
+     
+       if(second>=0 && second<=2 && pas== false) {
+         double result[];
+         if(BuildDataset(60,result,2)) {
+            while(1) {
+               bool datasave = SaveDataset(result);
+               if(datasave==true) { //dataset insert
+               
+                  while(1) {
+                     predict = GetPredict();
+                      if((predict!=last_predict && predict!=0)) {
+
+                             if(predict>0) {
+                                 
+                                 if(posTotal>0 && isbuy==false) {
+                                   if(CloseAll(_Symbol)==true) {
+                                    Print("close"); BuyPosition();
+                                   }
+                                  
+                                 }
+                                 if(posTotal<=0) {
+                                    BuyPosition();
+                                    
+                                 }
+                                 isbuy =true;
+                              }
+                              if(predict<0) {
+                                 if(posTotal>0  && isbuy==true) {
+                                       if(CloseAll(_Symbol)==true) {
+                                          Print("close");
+                                          SellPosition();
+                                         }
+                                       
+                                   }
+                                 //SellPosition();
+                                   if(posTotal<=0) {
+                                    SellPosition();
+                                    
+                                 }
+                                 isbuy=false;
+                              }
+
+                              last_predict = predict;
+                              predict = predict;
+                             pas = true; 
+                              return;
+                     }
+                  
+                    
+                  }
+                   
+                }
+          
+          }
+         }   
+      }
+
+      //double profit = AccountInfoDouble(ACCOUNT_PROFIT);
+      if((pas==true)  && (second>=58)) {
+         close(_Symbol);
+         pas = false;
+      }
+  }
+  
+ double GetPredict() {
+   int file_handle=FileOpen(InpFilePredict,FILE_ANSI|FILE_READ|FILE_CSV|FILE_COMMON,',');
+   if(file_handle!=INVALID_HANDLE)
+     {
+      PrintFormat("%s file is available for reading",InpFilePredict);
+      PrintFormat("File path: %s\\Files\\",TerminalInfoString(TERMINAL_DATA_PATH));
+      //--- additional variables
+      int    str_size;
+      string str=-1;
+      //--- read data from the file
+      while(!FileIsEnding(file_handle))
+        {
+         //--- find out how many symbols are used for writing the time
+         str_size=FileReadInteger(file_handle,INT_VALUE);
+         //--- read the string
+         str=FileReadString(file_handle,str_size);
+         //--- print the string
+         PrintFormat(str);
+         FileClose(file_handle);
+        
+        }
+        FileDelete(InpFilePredict);
+      //--- close the file
+       return double(str);
+      PrintFormat("Data is read, %s file is closed",InpFilePredict);
+     }
+   else
+      PrintFormat("Failed to open %s file, Error code = %d",InpFilePredict,GetLastError());
+   return 0;
+}
+
+bool SaveDataset(double& data[]) {
+
+    int file_handle=FileOpen(InpFileName,FILE_READ|FILE_WRITE|FILE_CSV|FILE_COMMON,',');
+   //int file_handle=FileOpen(InpDirectoryName+"//"+InpFileName,FILE_READ|FILE_WRITE|FILE_CSV);
+   if(file_handle!=INVALID_HANDLE)
+     {
+      nb_pos = nb_pos+1;
+            Print("nb_pos"+nb_pos);
+      PrintFormat("%s file is available for writing",InpFileName);
+      PrintFormat("File path: %s\\Files\\",TerminalInfoString(TERMINAL_DATA_PATH));
+      //--- first, write the number of signals
+      FileWrite(file_handle,"i,VALUE");
+      //--- write the time and values of signals to the file
+      for(int i=0;i<ArraySize(data);i++)
+         FileWrite(file_handle,i+","+data[i]);
+      //--- close the file
+      FileWrite(file_handle,"nb_post,"+nb_pos);
+      FileClose(file_handle);
+      //PrintFormat("Data is written, %s file is closed",InpFileName);
+      return true;
+     }
+   else {
+      //PrintFormat("Failed to open %s file, Error code = %d",InpFileName,GetLastError());
+      return false;
+   }
+      
+}
+
+//+------------------------------------------------------------------+
+ bool CloseAll(string symbolName){   
+
+     int Positionsforthissymbol=0;
+   
+   for(int i=PositionsTotal()-1; i>=0; i--)
+   {
+      string symbol=PositionGetSymbol(i);
+
+         if(Symbol()==symbol)
+           {
+            Positionsforthissymbol+=1;
+           }
+   }
+   
+double profit[];
+ ArrayResize(profit,20);
+if(Positionsforthissymbol>0)
+   {
+      for(int i=0; i<Positionsforthissymbol; i++)
+      {
+         if(PositionSelect(_Symbol)==true)
+         {
+          
+               close(_Symbol);
+            
+         }
+      }
+   }
+   return true;
+}
+void close(string symbolName){   
+
+   CTrade trade;
+
+       if(PositionSelectByTicket(getLastTicket(symbolName))){
+
+            trade.PositionClose(PositionGetInteger(POSITION_TICKET));
+      
+         }
+
+  
+}
+bool SellPosition() {
+   CTrade trade;
+
+   if(trade.Sell(0.001,_Symbol,0,0,0)){ 
+      return true;
+   }
+  return false;
+}
+bool BuyPosition() {
+   CTrade trade;
+
+   if(trade.Buy(0.001,_Symbol,0,0,0)){ 
+      return true;
+   }
+  return false;
+}
+
+int Seconds(double second)
+{
+  datetime time = (uint)TimeCurrent();
+  return((int)time % 60);
+}

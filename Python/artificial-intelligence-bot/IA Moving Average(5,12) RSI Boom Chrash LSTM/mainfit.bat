@@ -1,0 +1,2 @@
+python mainfit.py
+pause

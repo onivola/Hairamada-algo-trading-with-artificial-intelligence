@@ -1,0 +1,3 @@
+
+python MainOlymp.py
+pause

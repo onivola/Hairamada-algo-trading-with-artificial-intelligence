@@ -1,0 +1,2 @@
+python mainLSTMFIT.py
+pause

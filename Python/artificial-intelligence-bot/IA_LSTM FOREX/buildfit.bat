@@ -1,0 +1,3 @@
+
+python mainlstmfit.py
+pause
